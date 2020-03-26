@@ -2,3 +2,4 @@ media-service
 logs
 vendor
 mediafile
+*.log

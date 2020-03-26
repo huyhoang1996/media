@@ -195,6 +195,22 @@ func GetRequestID(ctx context.Context) string {
 	return ""
 }
 
+func deployLog() {
+	// open a file
+	f, err := os.OpenFile("testlogrus.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	if err != nil {
+		fmt.Printf("error opening file: %v", err)
+	}
+
+	// defer f.Close()
+
+	// Log as JSON instead of the default ASCII formatter.
+	log.SetFormatter(&log.TextFormatter{})
+
+	// Output to stderr instead of stdout, could also be a file.
+	log.SetOutput(f)
+}
+
 //#region middlewares
 
 func reqIDMiddleware1(next func(http.ResponseWriter, *http.Request) error) http.Handler {
@@ -203,12 +219,18 @@ func reqIDMiddleware1(next func(http.ResponseWriter, *http.Request) error) http.
 		ctx = AssignRequestID(ctx)
 		r = r.WithContext(ctx)
 		reqID := GetRequestID(ctx)
+		env := os.Getenv("ENV")
+		if env == "PRODUCTION" {
+			deployLog()
+		}
 		logger := log.WithField(LogFieldKeyRequestID, reqID)
 
+		// Only log the warning severity or above.
+		log.SetLevel(log.DebugLevel)
 		logger.Infof("Incomming request %s %s %s", r.Method, r.RequestURI, r.RemoteAddr)
 		err := next(w, r)
-		log.Error(err)
-		log.Infof("Finished handling http req. %s", GetRequestID(ctx))
+		logger.Error(err)
+		logger.Infof("Finished handling http req")
 	})
 }
 
