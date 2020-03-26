@@ -48,7 +48,7 @@ import (
 // }
 
 const maxUploadSize = 2 * 1024 * 1024 // 2 mb
-const uploadPath = "./mediafile"
+const uploadPath = "/mediafile"
 
 type msgError interface {
 	Error() string
@@ -110,7 +110,7 @@ func handler(w http.ResponseWriter, r *http.Request) error {
 		renderError(w, "CANT_READ_FILE_TYPE", http.StatusInternalServerError)
 		return err
 	}
-	newPath := filepath.Join(uploadPath, fileName+fileEndings[0])
+	newPath := filepath.Join(os.Getenv("PROJECT_PATH")+uploadPath, fileName+fileEndings[0])
 	fmt.Printf("FileType: %s, File: %s\n", detectedFileType, newPath)
 
 	// write file
@@ -197,7 +197,7 @@ func GetRequestID(ctx context.Context) string {
 
 func deployLog() {
 	// open a file
-	f, err := os.OpenFile("testlogrus.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	f, err := os.OpenFile(os.Getenv("PROJECT_PATH")+"testlogrus.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		fmt.Printf("error opening file: %v", err)
 	}
@@ -220,6 +220,7 @@ func reqIDMiddleware1(next func(http.ResponseWriter, *http.Request) error) http.
 		r = r.WithContext(ctx)
 		reqID := GetRequestID(ctx)
 		env := os.Getenv("ENV")
+
 		if env == "PRODUCTION" {
 			deployLog()
 		}
