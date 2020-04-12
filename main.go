@@ -170,6 +170,8 @@ type ContextKey string // can be unexported
 // ContextKeyRequestID is the ContextKey for RequestID
 const ContextKeyRequestID ContextKey = "requestID" // can be unexported
 
+const LogFieldKeyRequestID = "requestID"
+
 // AttachRequestID will attach a brand new request ID to a http request
 func AssignRequestID(ctx context.Context) context.Context {
 
@@ -234,8 +236,6 @@ func reqIDMiddleware1(next func(http.ResponseWriter, *http.Request) error) http.
 		logger.Infof("Finished handling http req")
 	})
 }
-
-const LogFieldKeyRequestID = "requestID"
 
 //#endregion middlewares
 
