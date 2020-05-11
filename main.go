@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -13,42 +14,13 @@ import (
 
 	"github.com/go-pg/pg"
 	"github.com/google/uuid"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
-
-// func handler(w http.ResponseWriter, r *http.Request) {
-// 	fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
-// 	fmt.Println("method:", r.Method)
-// 	if r.Method == "GET" {
-// 		crutime := time.Now().Unix()
-// 		h := md5.New()
-// 		io.WriteString(h, strconv.FormatInt(crutime, 10))
-// 		token := fmt.Sprintf("%x", h.Sum(nil))
-
-// 		t, _ := template.ParseFiles("upload.gtpl")
-// 		t.Execute(w, token)
-// 	} else {
-// 		r.ParseMultipartForm(32 << 20)
-// 		file, handler, err := r.FormFile("file")
-// 		if err != nil {
-// 			fmt.Println(err)
-// 			return
-// 		}
-// 		defer file.Close()
-// 		fmt.Fprintf(w, "%v", handler.Header)
-// 		f, err := os.OpenFile("./media/"+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
-// 		if err != nil {
-// 			fmt.Println(err)
-// 			return
-// 		}
-// 		defer f.Close()
-// 		io.Copy(f, file)
-// 	}
-
-// }
 
 const maxUploadSize = 2 * 1024 * 1024 // 2 mb
 const uploadPath = "/mediafile"
+
+const LogFieldKeyRequestID = "requestID"
 
 type msgError interface {
 	Error() string
@@ -103,15 +75,15 @@ func handler(w http.ResponseWriter, r *http.Request) error {
 	}
 	fileName := randToken(12)
 	fileEndings, err := mime.ExtensionsByType(detectedFileType)
-	fmt.Println("fileName ", fileName)
-	fmt.Println("fileEndings ", fileEndings)
+	// fmt.Println("fileName ", fileName)
+	// fmt.Println("fileEndings ", fileEndings)
 
 	if err != nil {
 		renderError(w, "CANT_READ_FILE_TYPE", http.StatusInternalServerError)
 		return err
 	}
 	newPath := filepath.Join(os.Getenv("PROJECT_PATH")+uploadPath, fileName+fileEndings[0])
-	fmt.Printf("FileType: %s, File: %s\n", detectedFileType, newPath)
+	// fmt.Printf("FileType: %s, File: %s\n", detectedFileType, newPath)
 
 	// write file
 	newFile, err := os.Create(newPath)
@@ -124,18 +96,33 @@ func handler(w http.ResponseWriter, r *http.Request) error {
 		renderError(w, "CANT_WRITE_FILE", http.StatusInternalServerError)
 		return err
 	}
+	type DBConfig struct {
+		user        string
+		password    string
+		database    string
+		addr        string
+		search_path string
+	}
+
+	env := os.Getenv("ENV")
+	dbconfig := DBConfig{"postgres", "huyhoang@123", "media",
+		fmt.Sprintf("%s:%d", "192.168.3.212", 5433),
+		"media"}
+	if env == "PRODUCTION" {
+		dbconfig = DBConfig{"postgres", "huyhoang@123", "media", fmt.Sprintf("%s:%d", "127.0.0.1", 5433), "media"}
+	}
 
 	db := pg.Connect(&pg.Options{
-		User:                  "postgres",
-		Password:              "huyhoang@123",
-		Database:              "media",
-		Addr:                  fmt.Sprintf("%s:%d", "127.0.0.1", 5433),
+		User:                  dbconfig.user,
+		Password:              dbconfig.password,
+		Database:              dbconfig.database,
+		Addr:                  dbconfig.addr,
 		RetryStatementTimeout: true,
 		MaxRetries:            4,
 		MinRetryBackoff:       250 * 6000,
 		OnConnect: func(conn *pg.Conn) error {
 			zone, _ := time.Now().Zone()
-			_, err := conn.Exec("set search_path = ?; set timezone = ?", "media", zone)
+			_, err := conn.Exec("set search_path = ?; set timezone = ?", dbconfig.search_path, zone)
 			if err != nil {
 				fmt.Println("Connect Fail")
 				fmt.Println("ERR:: ", err)
@@ -164,56 +151,43 @@ func handler(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// ContextKey is used for context.Context value. The value requires a key that is not primitive type.
 type ContextKey string // can be unexported
 
-// ContextKeyRequestID is the ContextKey for RequestID
 const ContextKeyRequestID ContextKey = "requestID" // can be unexported
 
-const LogFieldKeyRequestID = "requestID"
-
-// AttachRequestID will attach a brand new request ID to a http request
 func AssignRequestID(ctx context.Context) context.Context {
-
 	reqID := uuid.New()
-	fmt.Println("reqID:: ", reqID.String())
+	// fmt.Println("reqID:: ", reqID.String())
 	ctx2 := context.WithValue(ctx, ContextKeyRequestID, reqID.String())
-	fmt.Println("===2 reqID:: ", ctx.Value(ContextKeyRequestID))
-	fmt.Println("===2 reqID:: ", ctx2.Value(ContextKeyRequestID))
-
+	// fmt.Println("===2 reqID:: ", ctx.Value(ContextKeyRequestID))
+	// fmt.Println("===2 reqID:: ", ctx2.Value(ContextKeyRequestID))
 	return ctx2
 }
 
 // GetRequestID will get reqID from a http request and return it as a string
 func GetRequestID(ctx context.Context) string {
-
 	reqID := ctx.Value(ContextKeyRequestID)
-	fmt.Println("GetRequestID reqID:: ", reqID)
-
 	if ret, ok := reqID.(string); ok {
 		return ret
 	}
-
 	return ""
 }
 
-func deployLog() {
+func deployLog(env string) {
 	// open a file
 	f, err := os.OpenFile(os.Getenv("PROJECT_PATH")+"testlogrus.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	fmt.Println("=== ERR", err)
 	if err != nil {
 		fmt.Printf("error opening file: %v", err)
 	}
+	logrus.SetOutput(os.Stdout)
 
+	if env == "PRODUCTION" {
+		// logrus.SetFormatter(&logrus.JSONFormatter{})
+		logrus.SetOutput(f)
+	}
 	// defer f.Close()
-
-	// Log as JSON instead of the default ASCII formatter.
-	log.SetFormatter(&log.TextFormatter{})
-
-	// Output to stderr instead of stdout, could also be a file.
-	log.SetOutput(f)
 }
-
-//#region middlewares
 
 func reqIDMiddleware1(next func(http.ResponseWriter, *http.Request) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -221,25 +195,32 @@ func reqIDMiddleware1(next func(http.ResponseWriter, *http.Request) error) http.
 		ctx = AssignRequestID(ctx)
 		r = r.WithContext(ctx)
 		reqID := GetRequestID(ctx)
-		env := os.Getenv("ENV")
+		fmt.Println("=== reqID:: ", reqID)
 
-		if env == "PRODUCTION" {
-			deployLog()
-		}
-		logger := log.WithField(LogFieldKeyRequestID, reqID)
+		deployLog(os.Getenv("ENV"))
+		logger := logrus.WithField(LogFieldKeyRequestID, reqID)
 
 		// Only log the warning severity or above.
-		log.SetLevel(log.DebugLevel)
-		logger.Infof("Incomming request %s %s %s", r.Method, r.RequestURI, r.RemoteAddr)
+		logger.Info("Incomming request %s %s %s", r.Method, r.RequestURI, r.RemoteAddr)
 		err := next(w, r)
 		logger.Error(err)
-		logger.Infof("Finished handling http req")
+		logger.Info("Finished handling http req")
 	})
 }
 
-//#endregion middlewares
+func init() {
+	// Log as JSON instead of the default ASCII formatter.
+	// logrus.SetFormatter(&logrus.JSONFormatter{})
+
+	// Output to stdout instead of the default stderr
+	// Can be any io.Writer, see below for File example
+}
 
 func main() {
+	logrus.WithFields(logrus.Fields{
+		"animal": "walrus",
+		"size":   10,
+	}).Info("Start Server")
 	// http.HandleFunc("/", reqIDMiddleware1(handler))
 	http.Handle("/", reqIDMiddleware1(handler))
 	log.Fatal(http.ListenAndServe(":8080", nil))
