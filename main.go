@@ -217,5 +217,5 @@ func main() {
 		"size":   10,
 	}).Info("Start Server")
 	http.Handle("/", reqIDMiddleware1(handler))
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8081", nil))
 }
