@@ -1,0 +1,13 @@
+version: '2.1'
+
+services:
+  servergo:
+    image: go-media:1.0.0
+    build: .
+    ports:
+      - 5433:5432
+    restart: always
+    volumes:
+      - type: volume
+        source: myvol3
+        target: /go/src/app

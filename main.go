@@ -25,6 +25,9 @@ const LogFieldKeyRequestID = "requestID"
 type msgError interface {
 	Error() string
 }
+type ContextKey string // can be unexported
+
+const ContextKeyRequestID ContextKey = "requestID" // can be unexported
 
 func renderError(w http.ResponseWriter, message string, statusCode int) {
 	w.WriteHeader(http.StatusBadRequest)
@@ -151,16 +154,9 @@ func handler(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-type ContextKey string // can be unexported
-
-const ContextKeyRequestID ContextKey = "requestID" // can be unexported
-
 func AssignRequestID(ctx context.Context) context.Context {
 	reqID := uuid.New()
-	// fmt.Println("reqID:: ", reqID.String())
 	ctx2 := context.WithValue(ctx, ContextKeyRequestID, reqID.String())
-	// fmt.Println("===2 reqID:: ", ctx.Value(ContextKeyRequestID))
-	// fmt.Println("===2 reqID:: ", ctx2.Value(ContextKeyRequestID))
 	return ctx2
 }
 
@@ -200,7 +196,6 @@ func reqIDMiddleware1(next func(http.ResponseWriter, *http.Request) error) http.
 		deployLog(os.Getenv("ENV"))
 		logger := logrus.WithField(LogFieldKeyRequestID, reqID)
 
-		// Only log the warning severity or above.
 		logger.Info("Incomming request %s %s %s", r.Method, r.RequestURI, r.RemoteAddr)
 		err := next(w, r)
 		logger.Error(err)
@@ -221,7 +216,6 @@ func main() {
 		"animal": "walrus",
 		"size":   10,
 	}).Info("Start Server")
-	// http.HandleFunc("/", reqIDMiddleware1(handler))
 	http.Handle("/", reqIDMiddleware1(handler))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
