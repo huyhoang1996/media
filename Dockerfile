@@ -1,9 +1,15 @@
 FROM golang:1.12
 
-WORKDIR /go/src/app
+RUN mkdir /go/src/github.com/
+RUN cd /go/src/github.com/
+RUN git clone https://github.com/huyhoang1996/media.git
+#Set working directory
+RUN cd media/
+WORKDIR /go/src/github.com/media/
+
+RUN go get -u github.com/golang/dep/cmd/dep
 COPY . .
+RUN dep ensure -v
+RUN go build
 
-RUN go get -d -v ./...
-RUN go install -v ./...
-
-CMD ["app"]
+CMD ["./media"]
